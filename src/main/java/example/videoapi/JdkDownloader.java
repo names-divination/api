@@ -53,6 +53,18 @@ public class JdkDownloader extends Downloader {
 
             HttpResponse<String> response = client.send(
                     builder.build(), HttpResponse.BodyHandlers.ofString());
+            if (request.url().contains("youtubei.googleapis.com")) {
+    String contentType = response.headers()
+            .firstValue("content-type").orElse("(なし)");
+
+    String body = response.body() == null ? "" : response.body();
+    String preview = body.substring(0, Math.min(body.length(), 300))
+            .replace("\n", " ");
+
+    System.err.println("YouTube応答ステータス: " + response.statusCode());
+    System.err.println("YouTube応答形式: " + contentType);
+    System.err.println("YouTube応答内容: " + preview);
+}
 
             return new Response(response.statusCode(), "",
                     response.headers().map(), response.body(),
