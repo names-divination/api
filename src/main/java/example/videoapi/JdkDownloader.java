@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public class JdkDownloader extends Downloader {
+
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(20))
             .followRedirects(HttpClient.Redirect.ALWAYS)
@@ -30,10 +31,13 @@ public class JdkDownloader extends Downloader {
                             .timeout(Duration.ofSeconds(30));
 
             Map<String, List<String>> headers = request.headers();
+
             if (headers != null) {
                 headers.forEach((name, values) -> {
                     if (values != null) {
-                        for (String value : values) builder.header(name, value);
+                        for (String value : values) {
+                            builder.header(name, value);
+                        }
                     }
                 });
             }
@@ -41,37 +45,63 @@ public class JdkDownloader extends Downloader {
             if (headers == null || headers.keySet().stream()
                     .noneMatch(name -> name.equalsIgnoreCase("User-Agent"))) {
                 builder.header("User-Agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                        + "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        + "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        + "Chrome/130.0.0.0 Safari/537.36");
             }
 
             byte[] data = request.dataToSend();
+
             BodyPublisher body = data == null
                     ? BodyPublishers.noBody()
                     : BodyPublishers.ofByteArray(data);
-            builder.method(request.httpMethod().toUpperCase(Locale.ROOT), body);
+
+            builder.method(
+                    request.httpMethod().toUpperCase(Locale.ROOT),
+                    body
+            );
 
             HttpResponse<String> response = client.send(
-                    builder.build(), HttpResponse.BodyHandlers.ofString());
+                    builder.build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
+
+            // YouTubeからの応答を調査するためのログ
             if (request.url().contains("youtubei.googleapis.com")) {
-    String contentType = response.headers()
-            .firstValue("content-type").orElse("(なし)");
 
-    String body = response.body() == null ? "" : response.body();
-    String preview = body.substring(0, Math.min(body.length(), 300))
-            .replace("\n", " ");
+                String contentType = response.headers()
+                        .firstValue("content-type")
+                        .orElse("(なし)");
 
-    System.err.println("YouTube応答ステータス: " + response.statusCode());
-    System.err.println("YouTube応答形式: " + contentType);
-    System.err.println("YouTube応答内容: " + preview);
-}
+                String responseBody = response.body() == null
+                        ? ""
+                        : response.body();
 
-            return new Response(response.statusCode(), "",
-                    response.headers().map(), response.body(),
-                    response.uri().toString());
+                String preview = responseBody.substring(
+                        0,
+                        Math.min(responseBody.length(), 300)
+                ).replace("\n", " ");
+
+                System.err.println("========== YouTube通信調査 ==========");
+                System.err.println("URL: " + request.url());
+                System.err.println("応答ステータス: " + response.statusCode());
+                System.err.println("応答形式: " + contentType);
+                System.err.println("応答内容: " + preview);
+                System.err.println("=====================================");
+            }
+
+            return new Response(
+                    response.statusCode(),
+                    "",
+                    response.headers().map(),
+                    response.body(),
+                    response.uri().toString()
+            );
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("HTTP request interrupted", e);
+
         } catch (IllegalArgumentException e) {
             throw new IOException("Invalid HTTP request", e);
         }
