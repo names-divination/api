@@ -10,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest.BodyPublisher;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -63,10 +64,9 @@ public class JdkDownloader extends Downloader {
 
             HttpResponse<String> response = client.send(
                     builder.build(),
-                    HttpResponse.BodyHandlers.ofString()
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
             );
 
-            // YouTubeからの応答を調査するためのログ
             if (request.url().contains("youtubei.googleapis.com")) {
 
                 String contentType = response.headers()
@@ -79,14 +79,15 @@ public class JdkDownloader extends Downloader {
 
                 String preview = responseBody.substring(
                         0,
-                        Math.min(responseBody.length(), 300)
-                ).replace("\n", " ");
+                        Math.min(responseBody.length(), 3000)
+                ).replace("\n", " ").replace("\r", " ");
 
                 System.err.println("========== YouTube通信調査 ==========");
-                System.err.println("URL: " + request.url());
                 System.err.println("応答ステータス: " + response.statusCode());
                 System.err.println("応答形式: " + contentType);
-                System.err.println("応答内容: " + preview);
+                System.err.println("応答先: " + response.uri());
+                System.err.println("応答内容（最大3000文字）:");
+                System.err.println(preview);
                 System.err.println("=====================================");
             }
 
