@@ -29,20 +29,16 @@ public class VideoController {
             @PathVariable String id) {
 
         if (id == null || !id.matches("[A-Za-z0-9_-]{11}")) {
-            return error(HttpStatus.BAD_REQUEST,
-                    "動画IDの形式が正しくありません");
+            return error(HttpStatus.BAD_REQUEST, "動画IDの形式が正しくありません");
         }
 
         try {
-            String youtubeUrl =
-                    "https://www.youtube.com/watch?v=" + id;
+            String youtubeUrl = "https://www.youtube.com/watch?v=" + id;
 
             StreamInfo info = StreamInfo.getInfo(youtubeUrl);
 
-            List<VideoStream> videoOnlyStreams =
-                    info.getVideoOnlyStreams();
-            List<AudioStream> audioStreams =
-                    info.getAudioStreams();
+            List<VideoStream> videoOnlyStreams = info.getVideoOnlyStreams();
+            List<AudioStream> audioStreams = info.getAudioStreams();
 
             // 1. 720pの「映像のみ」ストリームを最優先で探す
             VideoStream selectedVideo = null;
@@ -53,7 +49,7 @@ public class VideoController {
                 }
             }
 
-            // 2. 720pがなければ、別の解像度（一番近いもの／最大のものなど）をフォールバックとして探す
+            // 2. 720pがなければ、別の解像度の中で一番高画質なものをフォールバックとして選択
             if (selectedVideo == null && !videoOnlyStreams.isEmpty()) {
                 selectedVideo = videoOnlyStreams.stream()
                         .filter(VideoStream::isUrl)
@@ -73,11 +69,10 @@ public class VideoController {
             }
 
             if (selectedVideo == null) {
-                return error(HttpStatus.NOT_FOUND,
-                        "適切な映像ストリームが見つかりませんでした");
+                return error(HttpStatus.NOT_FOUND, "適切な映像ストリームが見つかりませんでした");
             }
 
-            // レスポンス構築（URLを個別のオブジェクトに分けてレスポンスの肥大化・長文化を防止）
+            // レスポンスの構築（URL長すぎ問題対策として video と audio に分割）
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("id", id);
@@ -108,8 +103,7 @@ public class VideoController {
                     + ": " + e.getMessage()
             );
 
-            return error(HttpStatus.BAD_GATEWAY,
-                    "動画情報を取得できませんでした");
+            return error(HttpStatus.BAD_GATEWAY, "動画情報を取得できませんでした");
         }
     }
 
