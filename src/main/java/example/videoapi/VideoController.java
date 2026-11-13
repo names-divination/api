@@ -1,6 +1,6 @@
-
 package example.videoapi;
 
+import org.schabi.newpipe.extractor.stream.AudioStream;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 import org.springframework.http.HttpStatus;
@@ -20,12 +20,12 @@ import java.util.Map;
 public class VideoController {
 
     @GetMapping("/health")
-    public Map<String, Object> health() {
-        return Map.of("success", true, "message", "API is running");
+    public ResponseEntity> health() {
+        return ResponseEntity.ok(Map.of("success", true, "message", "API is running"));
     }
 
     @GetMapping("/api/video/{id}")
-    public ResponseEntity<Map<String, Object>> getVideo(
+    public ResponseEntity> getVideo(
             @PathVariable String id) {
 
         if (id == null || !id.matches("[A-Za-z0-9_-]{11}")) {
@@ -39,56 +39,65 @@ public class VideoController {
 
             StreamInfo info = StreamInfo.getInfo(youtubeUrl);
 
-            List<VideoStream> normalStreams =
-                    info.getVideoStreams();
-
             List<VideoStream> videoOnlyStreams =
                     info.getVideoOnlyStreams();
+            List<AudioStream> audioStreams =
+                    info.getAudioStreams();
 
-            int audioCount = info.getAudioStreams().size();
-
-            System.err.println("========== ストリーム調査 ==========");
-            System.err.println("動画タイトル: " + info.getName());
-            System.err.println("一体型動画: " + normalStreams.size());
-            System.err.println("映像のみ: " + videoOnlyStreams.size());
-            System.err.println("音声のみ: " + audioCount);
-
-            System.err.println("--- 一体型動画 ---");
-            printStreams(normalStreams);
-
-            System.err.println("--- 映像のみ ---");
-            printStreams(videoOnlyStreams);
-
-            System.err.println("====================================");
-
-            List<VideoStream> candidates = normalStreams.stream()
-                    .filter(VideoStream::isUrl)
-                    .filter(stream -> stream.getHeight() > 0
-                            && stream.getHeight() <= 720)
-                    .filter(stream -> stream.getContent()
-                            .startsWith("https://"))
-                    .sorted(
-                            Comparator.comparingInt(
-                                    VideoStream::getHeight
-                            ).reversed()
-                    )
-                    .toList();
-
-            if (candidates.isEmpty()) {
-                return error(HttpStatus.NOT_FOUND,
-                        "720p以下の一体型動画が見つかりませんでした");
+            // 1. 720pの「映像のみ」ストリームを最優先で探す
+            VideoStream selectedVideo = null;
+            for (VideoStream s : videoOnlyStreams) {
+                if (s.isUrl() && s.getHeight() == 720 && s.getContent().startsWith("https://")) {
+                    selectedVideo = s;
+                    break;
+                }
             }
 
-            VideoStream selected = candidates.get(0);
+            // 2. 720pがなければ、別の解像度（一番近いもの／最大のものなど）をフォールバックとして探す
+            if (selectedVideo == null && !videoOnlyStreams.isEmpty()) {
+                selectedVideo = videoOnlyStreams.stream()
+                        .filter(VideoStream::isUrl)
+                        .filter(s -> s.getContent().startsWith("https://"))
+                        .max(Comparator.comparingInt(VideoStream::getHeight))
+                        .orElse(null);
+            }
 
+            // 3. 音声ストリームを取得
+            AudioStream selectedAudio = null;
+            if (!audioStreams.isEmpty()) {
+                selectedAudio = audioStreams.stream()
+                        .filter(AudioStream::isUrl)
+                        .filter(s -> s.getContent().startsWith("https://"))
+                        .findFirst()
+                        .orElse(audioStreams.get(0));
+            }
+
+            if (selectedVideo == null) {
+                return error(HttpStatus.NOT_FOUND,
+                        "適切な映像ストリームが見つかりませんでした");
+            }
+
+            // レスポンス構築（URLを個別のオブジェクトに分けてレスポンスの肥大化・長文化を防止）
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("id", id);
             result.put("title", info.getName());
             result.put("uploader", info.getUploaderName());
-            result.put("quality", selected.getResolution());
-            result.put("height", selected.getHeight());
-            result.put("url", selected.getContent());
+            
+            // 映像情報
+            Map<String, Object> videoInfo = new LinkedHashMap<>();
+            videoInfo.put("quality", selectedVideo.getResolution());
+            videoInfo.put("height", selectedVideo.getHeight());
+            videoInfo.put("url", selectedVideo.getContent());
+            result.put("video", videoInfo);
+
+            // 音声情報
+            if (selectedAudio != null) {
+                Map<String, Object> audioInfo = new LinkedHashMap<>();
+                audioInfo.put("itag", selectedAudio.getItag());
+                audioInfo.put("url", selectedAudio.getContent());
+                result.put("audio", audioInfo);
+            }
 
             return ResponseEntity.ok(result);
 
@@ -104,17 +113,7 @@ public class VideoController {
         }
     }
 
-    private void printStreams(List<VideoStream> streams) {
-        for (VideoStream stream : streams) {
-            System.err.println(
-                    "画質: " + stream.getResolution()
-                    + " / 高さ: " + stream.getHeight()
-                    + " / URL形式: " + stream.isUrl()
-            );
-        }
-    }
-
-    private ResponseEntity<Map<String, Object>> error(
+    private ResponseEntity> error(
             HttpStatus status,
             String message) {
 
