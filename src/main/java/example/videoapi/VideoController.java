@@ -29,10 +29,8 @@ public class VideoController {
             @PathVariable String id) {
 
         if (id == null || !id.matches("[A-Za-z0-9_-]{11}")) {
-            return error(
-                    HttpStatus.BAD_REQUEST,
-                    "動画IDの形式が正しくありません"
-            );
+            return error(HttpStatus.BAD_REQUEST,
+                    "動画IDの形式が正しくありません");
         }
 
         try {
@@ -41,26 +39,30 @@ public class VideoController {
 
             StreamInfo info = StreamInfo.getInfo(youtubeUrl);
 
-            List<VideoStream> allStreams = info.getVideoStreams();
+            List<VideoStream> normalStreams =
+                    info.getVideoStreams();
+
+            List<VideoStream> videoOnlyStreams =
+                    info.getVideoOnlyStreams();
+
+            int audioCount = info.getAudioStreams().size();
 
             System.err.println("========== ストリーム調査 ==========");
             System.err.println("動画タイトル: " + info.getName());
-            System.err.println("動画ストリーム数: " + allStreams.size());
+            System.err.println("一体型動画: " + normalStreams.size());
+            System.err.println("映像のみ: " + videoOnlyStreams.size());
+            System.err.println("音声のみ: " + audioCount);
 
-            for (VideoStream stream : allStreams) {
-                System.err.println(
-                        "画質: " + stream.getResolution()
-                        + " / 高さ: " + stream.getHeight()
-                        + " / URL形式: " + stream.isUrl()
-                        + " / 映像のみ: " + stream.isVideoOnly()
-                );
-            }
+            System.err.println("--- 一体型動画 ---");
+            printStreams(normalStreams);
+
+            System.err.println("--- 映像のみ ---");
+            printStreams(videoOnlyStreams);
 
             System.err.println("====================================");
 
-            List<VideoStream> candidates = allStreams.stream()
+            List<VideoStream> candidates = normalStreams.stream()
                     .filter(VideoStream::isUrl)
-                    .filter(stream -> !stream.isVideoOnly())
                     .filter(stream -> stream.getHeight() > 0
                             && stream.getHeight() <= 720)
                     .filter(stream -> stream.getContent()
@@ -73,10 +75,8 @@ public class VideoController {
                     .toList();
 
             if (candidates.isEmpty()) {
-                return error(
-                        HttpStatus.NOT_FOUND,
-                        "720p以下の映像・音声一体型ストリームが見つかりませんでした"
-                );
+                return error(HttpStatus.NOT_FOUND,
+                        "720p以下の一体型動画が見つかりませんでした");
             }
 
             VideoStream selected = candidates.get(0);
@@ -89,7 +89,6 @@ public class VideoController {
             result.put("quality", selected.getResolution());
             result.put("height", selected.getHeight());
             result.put("url", selected.getContent());
-            result.put("note", "再生URLは期限切れになる場合があります");
 
             return ResponseEntity.ok(result);
 
@@ -100,9 +99,17 @@ public class VideoController {
                     + ": " + e.getMessage()
             );
 
-            return error(
-                    HttpStatus.BAD_GATEWAY,
-                    "動画情報を取得できませんでした"
+            return error(HttpStatus.BAD_GATEWAY,
+                    "動画情報を取得できませんでした");
+        }
+    }
+
+    private void printStreams(List<VideoStream> streams) {
+        for (VideoStream stream : streams) {
+            System.err.println(
+                    "画質: " + stream.getResolution()
+                    + " / 高さ: " + stream.getHeight()
+                    + " / URL形式: " + stream.isUrl()
             );
         }
     }
