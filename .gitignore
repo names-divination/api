@@ -1,1 +1,5 @@
-target/\n.idea/\n.vscode/\n*.iml\n.DS_Store\n
+target/
+.idea/
+.vscode/
+*.iml
+.DS_Store
